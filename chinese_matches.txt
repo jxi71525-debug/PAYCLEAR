@@ -1,0 +1,11 @@
+634: // 👉 为了免去每次输入的麻烦，你可以直接在这里把你的真实 URL 和 KEY 写死！
+636: const SUPABASE_KEY = cachedConfig.key || 'sb_publishable_brIpO2FHi_A3kCdgb4qsuQ_X2R1b9Q7'; // <--- 将你的 key 粘贴在这里
+639: if (SUPABASE_URL && SUPABASE_KEY && SUPABASE_KEY !== '请在这里填入你的_anon_key') {
+1146: if (/吃|喝|饭|餐|奶茶|咖啡|点心|外卖|food|eat|drink|meal|coffee|tea|dinner|lunch|breakfast/i.test(text)) category = 'food';
+1147: else if (/车|打车|地铁|公交|机票|高铁|油|uber|lyft|taxi|bus|train|flight|gas/i.test(text)) category = 'transport';
+1148: else if (/房|酒店|住宿|hotel|airbnb|rent|housing/i.test(text)) category = 'housing';
+1149: else if (/门票|玩|电影|ktv|密室|ticket|movie|fun|game/i.test(text)) category = 'entertainment';
+1150: else if (/买|超市|淘宝|衣服|网购|buy|shop|grocery|clothes|mall/i.test(text)) category = 'shopping';
+1864: // 如果是补出来的数据0，并且只有一个真实数据时，不显示0的标签
+2262: showToast(nextLang === 'zh' ? '语言已切换为：简体中文' : 'Language switched to: English');
+2680: <div className="py-20"></div> // 仅仅保持空白占位，不显示任何加载动画或文字
