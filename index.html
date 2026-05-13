@@ -624,6 +624,173 @@
         // Add a global audio for notifications (optional, if we want sound)
         // const notificationSound = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
 
+        const SwipeableNotification = ({ children, onClose, onClick, className = '' }) => {
+            const { useState, useRef } = React;
+            const [offsetY, setOffsetY] = useState(0);
+            const startYRef = useRef(0);
+            const isSwipingRef = useRef(false);
+
+            const handleTouchStart = (e) => {
+                startYRef.current = e.touches ? e.touches[0].clientY : e.clientY;
+                isSwipingRef.current = true;
+            };
+
+            const handleTouchMove = (e) => {
+                if (!isSwipingRef.current) return;
+                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                const deltaY = clientY - startYRef.current;
+                if (deltaY < 0) { // Only allow swipe up
+                    setOffsetY(deltaY);
+                }
+            };
+
+            const handleTouchEnd = () => {
+                if (!isSwipingRef.current) return;
+                isSwipingRef.current = false;
+                if (offsetY < -40) {
+                    onClose();
+                } else {
+                    setOffsetY(0);
+                }
+            };
+
+            return (
+                <div 
+                    className={`fixed left-1/2 -translate-x-1/2 z-[110] toast-enter w-[90%] max-w-sm ${className}`}
+                    style={{ top: 'max(env(safe-area-inset-top), 24px)', transform: `translate(-50%, ${offsetY}px)`, transition: isSwipingRef.current ? 'none' : 'transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)' }}
+                    onTouchStart={handleTouchStart}
+                    onTouchMove={handleTouchMove}
+                    onTouchEnd={handleTouchEnd}
+                    onMouseDown={handleTouchStart}
+                    onMouseMove={handleTouchMove}
+                    onMouseUp={handleTouchEnd}
+                    onMouseLeave={handleTouchEnd}
+                    onClick={onClick}
+                >
+                    {children}
+                </div>
+            );
+        };
+
+        const SwipeableGroupItem = ({ group, onClick, onDelete, onToggleSettle, language, t, formatActivityTime }) => {
+            const { useState, useRef, useEffect } = React;
+            const [offsetX, setOffsetX] = useState(0);
+            const [isOpen, setIsOpen] = useState(false);
+            const startXRef = useRef(0);
+            const isSwipingRef = useRef(false);
+            const itemRef = useRef(null);
+
+            const ACTION_WIDTH = 140; // 70px per button
+
+            const handleTouchStart = (e) => {
+                startXRef.current = e.touches ? e.touches[0].clientX : e.clientX;
+                isSwipingRef.current = true;
+            };
+
+            const handleTouchMove = (e) => {
+                if (!isSwipingRef.current) return;
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const deltaX = clientX - startXRef.current;
+                
+                if (deltaX < 0) {
+                    const newOffset = isOpen ? Math.max(-ACTION_WIDTH - 20, -ACTION_WIDTH + deltaX) : Math.max(-ACTION_WIDTH - 20, deltaX);
+                    setOffsetX(newOffset);
+                } else if (isOpen && deltaX > 0) {
+                    setOffsetX(Math.min(0, -ACTION_WIDTH + deltaX));
+                }
+            };
+
+            const handleTouchEnd = () => {
+                if (!isSwipingRef.current) return;
+                isSwipingRef.current = false;
+                if (offsetX < -ACTION_WIDTH / 2) {
+                    setOffsetX(-ACTION_WIDTH);
+                    setIsOpen(true);
+                } else {
+                    setOffsetX(0);
+                    setIsOpen(false);
+                }
+            };
+
+            useEffect(() => {
+                const handleClickOutside = (e) => {
+                    if (isOpen && itemRef.current && !itemRef.current.contains(e.target)) {
+                        setOffsetX(0);
+                        setIsOpen(false);
+                    }
+                };
+                document.addEventListener('mousedown', handleClickOutside);
+                document.addEventListener('touchstart', handleClickOutside);
+                return () => {
+                    document.removeEventListener('mousedown', handleClickOutside);
+                    document.removeEventListener('touchstart', handleClickOutside);
+                };
+            }, [isOpen]);
+
+            return (
+                <div className="relative overflow-hidden border-b border-gray-50 dark:border-darkBorder bg-white dark:bg-darkCard" ref={itemRef} style={{ touchAction: 'pan-y' }}>
+                    {/* Action Buttons (Background) */}
+                    <div className="absolute top-0 right-0 h-full flex items-center z-0">
+                        <button 
+                            onClick={(e) => { e.stopPropagation(); onToggleSettle(group); setOffsetX(0); setIsOpen(false); }}
+                            className={`h-full w-[70px] ${group.is_settled ? 'bg-gray-400' : 'bg-green-500'} text-white flex flex-col items-center justify-center text-sm font-bold active:opacity-80 transition-colors`}
+                        >
+                            <i className={`fa-solid ${group.is_settled ? 'fa-rotate-left' : 'fa-check-double'} mb-1 text-lg`}></i>
+                            {group.is_settled ? (language === 'zh' ? '撤销' : 'Undo') : (language === 'zh' ? '结清' : 'Settle')}
+                        </button>
+                        <button 
+                            onClick={(e) => { e.stopPropagation(); onDelete(group); setOffsetX(0); setIsOpen(false); }}
+                            className="h-full w-[70px] bg-red-500 text-white flex flex-col items-center justify-center text-sm font-bold active:bg-red-600 transition-colors"
+                        >
+                            <i className="fa-solid fa-trash-can mb-1 text-lg"></i>
+                            {language === 'zh' ? '删除' : 'Delete'}
+                        </button>
+                    </div>
+
+                    {/* Main Content (Foreground) */}
+                    <div 
+                        className={`relative z-10 flex items-center p-4 bg-white dark:bg-darkCard cursor-pointer active:bg-gray-50 dark:active:bg-darkBorder ${isSwipingRef.current ? '' : 'transition-transform duration-300'}`}
+                        style={{ transform: `translateX(${offsetX}px)` }}
+                        onClick={() => {
+                            if (isOpen) {
+                                setOffsetX(0);
+                                setIsOpen(false);
+                            } else {
+                                onClick();
+                            }
+                        }}
+                        onTouchStart={handleTouchStart}
+                        onTouchMove={handleTouchMove}
+                        onTouchEnd={handleTouchEnd}
+                        onMouseDown={handleTouchStart}
+                        onMouseMove={handleTouchMove}
+                        onMouseUp={handleTouchEnd}
+                        onMouseLeave={handleTouchEnd}
+                    >
+                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-lg shadow-sm shrink-0 transition-colors ${group.is_settled ? 'bg-gray-300 dark:bg-gray-600' : 'bg-gradient-to-br from-primaryLight to-primary'}`}>
+                            {group.name.substring(0, 2)}
+                        </div>
+                        <div className="ml-4 flex-1 overflow-hidden">
+                            <div className="flex justify-between items-center mb-1">
+                                <h3 className={`font-bold truncate transition-colors ${group.is_settled ? 'text-gray-400 dark:text-gray-500 line-through' : 'text-textMain dark:text-darkTextMain'}`}>
+                                    {group.name}
+                                </h3>
+                                <span className="text-xs text-textSub whitespace-nowrap">{formatActivityTime(group.last_activity)}</span>
+                            </div>
+                            <p className="text-sm text-textSub truncate">
+                                {group.is_settled ? (language === 'zh' ? '此账已结清' : 'Settled') : t.clickToEnter}
+                            </p>
+                        </div>
+                        {group.is_settled && (
+                            <div className="ml-2 w-6 h-6 rounded-full bg-green-50 dark:bg-green-900/20 text-green-500 flex items-center justify-center shrink-0">
+                                <i className="fa-solid fa-check text-xs"></i>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
         function App() {
             // ============================
             // Configuration & Auth
@@ -802,6 +969,7 @@
             const urlParams = new URLSearchParams(window.location.search);
             const addFriendId = urlParams.get('add_friend');
             const joinGroupId = urlParams.get('join_group');
+            const processedUrlActionRef = useRef(false);
 
             // Dashboard State
             const [myGroups, setMyGroups] = useState(() => {
@@ -871,13 +1039,16 @@
 
             // Toast State
             const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
+            const toastTimeoutRef = useRef(null);
             
             // System Notification (in-app banner)
             const [sysNotification, setSysNotification] = useState({ show: false, message: '', groupId: null });
+            const sysNotificationTimeoutRef = useRef(null);
 
             const showToast = (message, type = 'success') => {
                 setToast({ show: true, message, type });
-                setTimeout(() => setToast(prev => ({ ...prev, show: false })), 2500);
+                if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+                toastTimeoutRef.current = setTimeout(() => setToast(prev => ({ ...prev, show: false })), 2500);
             };
 
             const formatActivityTime = (dateString) => {
@@ -931,7 +1102,8 @@
 
                 // Show in-app banner
                 setSysNotification({ show: true, message, groupId });
-                setTimeout(() => {
+                if (sysNotificationTimeoutRef.current) clearTimeout(sysNotificationTimeoutRef.current);
+                sysNotificationTimeoutRef.current = setTimeout(() => {
                     setSysNotification(prev => ({ ...prev, show: false }));
                 }, 4000);
                 
@@ -1119,11 +1291,60 @@
                 }
             };
 
+            const handleProcessScanResult = async (friendId, groupId) => {
+                if (!currentUser || !supabase) return;
+
+                if (friendId) {
+                    if (friendId === currentUser.id) {
+                        showToast(language === "zh" ? "不能添加自己为好友" : "Cannot add yourself", "error");
+                        return;
+                    }
+                    // Check if already friends
+                    const { data: existing } = await supabase.from('friendships')
+                        .select('*')
+                        .or(`and(user_id1.eq.${currentUser.id},user_id2.eq.${friendId}),and(user_id1.eq.${friendId},user_id2.eq.${currentUser.id})`);
+                    
+                    if (!existing || existing.length === 0) {
+                        const id1 = currentUser.id < friendId ? currentUser.id : friendId;
+                        const id2 = currentUser.id < friendId ? friendId : currentUser.id;
+                        const { error: insertError } = await supabase.from('friendships').insert({ user_id1: id1, user_id2: id2 });
+                        
+                        if (insertError) {
+                            showToast((language === "zh" ? "添加失败: " : "Add failed: ") + insertError.message, "error");
+                        } else {
+                            showToast(language === "zh" ? "添加好友成功！" : "Friend added successfully!");
+                            setTimeout(fetchDashboardData, 500);
+                        }
+                    } else {
+                        showToast(language === "zh" ? "该用户已经是您的好友了！" : "This user is already your friend!", "error");
+                    }
+                }
+
+                if (groupId) {
+                    const { data: existing } = await supabase.from('group_members')
+                        .select('*')
+                        .eq('group_id', groupId)
+                        .eq('user_id', currentUser.id);
+                    
+                    if (!existing || existing.length === 0) {
+                        await supabase.from('group_members').insert({ group_id: groupId, user_id: currentUser.id });
+                    }
+                    openGroup(groupId);
+                }
+            };
+
             const handleUrlActions = async () => {
                 if (!currentUser || !supabase) return;
+                if (processedUrlActionRef.current) return;
 
                 // Handle Add Friend link
                 if (addFriendId && addFriendId !== currentUser.id) {
+                    processedUrlActionRef.current = true;
+                    // Remove param from URL without reloading
+                    const url = new URL(window.location);
+                    url.searchParams.delete('add_friend');
+                    window.history.pushState({}, '', url);
+
                     // Check if already friends
                     const { data: existing } = await supabase.from('friendships')
                         .select('*')
@@ -1142,12 +1363,8 @@
                             showToast(language === "zh" ? "添加好友成功！" : "Friend added successfully!");
                         }
                     } else {
-                        showToast(language === "zh" ? "你们已经是好友啦！" : "You are already friends!", "error");
+                        showToast(language === "zh" ? "该用户已经是您的好友了！" : "This user is already your friend!", "error");
                     }
-                    // Remove param from URL without reloading
-                    const url = new URL(window.location);
-                    url.searchParams.delete('add_friend');
-                    window.history.pushState({}, '', url);
                     
                     // Delay slightly to ensure Supabase replication lag doesn't cause a miss
                     setTimeout(fetchDashboardData, 500);
@@ -1155,6 +1372,12 @@
 
                 // Handle Join Group link
                 if (joinGroupId) {
+                    processedUrlActionRef.current = true;
+                    // Remove param from URL
+                    const url = new URL(window.location);
+                    url.searchParams.delete('join_group');
+                    window.history.pushState({}, '', url);
+
                     // Check if already in group
                     const { data: existing } = await supabase.from('group_members')
                         .select('*')
@@ -1164,7 +1387,6 @@
                     if (!existing || existing.length === 0) {
                         await supabase.from('group_members').insert({ group_id: joinGroupId, user_id: currentUser.id });
                     }
-                    window.history.pushState({}, '', window.location.pathname);
                     openGroup(joinGroupId);
                 }
             };
@@ -1334,30 +1556,32 @@
 
                 setChatInput('');
                 
-                // Optimistic UI for chat message
-                const tempId = Date.now().toString();
+                // Optimistic UI for chat message with fallback ID generator for non-HTTPS LAN
+                const msgId = window.crypto && window.crypto.randomUUID ? window.crypto.randomUUID() : (Date.now().toString() + Math.random().toString(36).substring(2, 9));
                 const newMsg = {
-                    id: tempId,
+                    id: msgId,
                     group_id: currentGroup.id,
                     user_id: currentUser.id,
                     content: text,
                     created_at: new Date().toISOString()
                 };
                 
+                // Instantly show in UI
+                setMessages(prev => [...prev, newMsg]);
+                setTimeout(() => {
+                    if (chatScrollRef.current) chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
+                }, 50);
+
                 // Parse for smart suggestion
                 const parsed = parseExpenseText(text);
                 if (parsed) {
-                    setSmartSuggestion({ ...parsed, triggerMsgId: tempId, text });
+                    setSmartSuggestion({ ...parsed, triggerMsgId: msgId, text });
                 } else {
                     setSmartSuggestion(null);
                 }
 
                 // Insert to DB
-                await supabase.from('messages').insert({
-                    group_id: currentGroup.id,
-                    user_id: currentUser.id,
-                    content: text
-                });
+                await supabase.from('messages').insert(newMsg);
             };
 
             const handleAcceptSmartSuggestion = () => {
@@ -1898,7 +2122,7 @@
                     // Delay slightly to ensure Supabase replication lag doesn't cause a miss
                     setTimeout(fetchDashboardData, 500);
                 } else {
-                    showToast(language === "zh" ? "你们已经是好友啦！" : "You are already friends!", "error");
+                    showToast(language === "zh" ? "该用户已经是您的好友了！" : "This user is already your friend!", "error");
                 }
             };
 
@@ -1932,6 +2156,7 @@
             // Scanner logic
             useEffect(() => {
                 let html5QrcodeScanner = null;
+                let isProcessingScan = false;
                 
                 if (showScannerModal) {
                     // Check if browser supports camera (usually requires HTTPS)
@@ -1943,43 +2168,54 @@
 
                     // Small delay to ensure DOM is ready
                     setTimeout(() => {
-                        html5QrcodeScanner = new Html5QrcodeScanner(
-                            "reader",
-                            { fps: 10, qrbox: {width: 250, height: 250}, aspectRatio: 1.0 },
-                            /* verbose= */ false
-                        );
+                        // Use Html5Qrcode instead of Html5QrcodeScanner for a custom UI without the built-in ugly UI
+                        html5QrcodeScanner = new Html5Qrcode("reader");
                         
-                        html5QrcodeScanner.render((decodedText, decodedResult) => {
-                            // Handle on success
-                            console.log(`Scan result: ${decodedText}`);
-                            html5QrcodeScanner.clear();
-                            setShowScannerModal(false);
-                            
-                            // Check if it's our URL format
-                            try {
-                                const url = new URL(decodedText);
-                                const addFriendParam = url.searchParams.get('add_friend');
-                                const joinGroupParam = url.searchParams.get('join_group');
-                                
-                                if (addFriendParam) {
-                                    window.location.href = decodedText;
-                                } else if (joinGroupParam) {
-                                    window.location.href = decodedText;
-                                } else {
-                                    alert(t.invalidQR);
-                                }
-                            } catch (e) {
-                                alert(t.unrecognizedQR);
+                        html5QrcodeScanner.start(
+                            { facingMode: "environment" }, // Prefer back camera
+                            {
+                                fps: 10,
+                                qrbox: { width: 250, height: 250 },
+                                aspectRatio: 1.0
+                            },
+                            (decodedText, decodedResult) => {
+                                // Handle on success
+                                if (isProcessingScan) return;
+                                isProcessingScan = true;
+                                console.log(`Scan result: ${decodedText}`);
+                                html5QrcodeScanner.stop().then(() => {
+                                    setShowScannerModal(false);
+                                    // Check if it's our URL format
+                                    try {
+                                        const url = new URL(decodedText);
+                                        const addFriendParam = url.searchParams.get('add_friend');
+                                        const joinGroupParam = url.searchParams.get('join_group');
+                                        
+                                        if (addFriendParam) {
+                                            handleProcessScanResult(addFriendParam, null);
+                                        } else if (joinGroupParam) {
+                                            handleProcessScanResult(null, joinGroupParam);
+                                        } else {
+                                            alert(t.invalidQR);
+                                        }
+                                    } catch (e) {
+                                        alert(t.unrecognizedQR);
+                                    }
+                                }).catch(e => console.error(e));
+                            },
+                            (errorMessage) => {
+                                // parse error, ignore
                             }
-                        }, (errorMessage) => {
-                            // parse error, ignore
+                        ).catch(err => {
+                            console.error("Camera start error", err);
+                            alert("无法启动摄像头，请检查权限");
                         });
                     }, 100);
                 }
 
                 return () => {
-                    if (html5QrcodeScanner) {
-                        html5QrcodeScanner.clear().catch(e => console.error(e));
+                    if (html5QrcodeScanner && html5QrcodeScanner.isScanning) {
+                        html5QrcodeScanner.stop().catch(e => console.error(e));
                     }
                 };
             }, [showScannerModal]);
@@ -2230,53 +2466,6 @@
             // Render Components
             // ============================
 
-            const SwipeableNotification = ({ children, onClose, onClick, className = '' }) => {
-                const [offsetY, setOffsetY] = useState(0);
-                const startYRef = useRef(0);
-                const isSwipingRef = useRef(false);
-
-                const handleTouchStart = (e) => {
-                    startYRef.current = e.touches ? e.touches[0].clientY : e.clientY;
-                    isSwipingRef.current = true;
-                };
-
-                const handleTouchMove = (e) => {
-                    if (!isSwipingRef.current) return;
-                    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-                    const deltaY = clientY - startYRef.current;
-                    if (deltaY < 0) { // Only allow swipe up
-                        setOffsetY(deltaY);
-                    }
-                };
-
-                const handleTouchEnd = () => {
-                    if (!isSwipingRef.current) return;
-                    isSwipingRef.current = false;
-                    if (offsetY < -40) {
-                        onClose();
-                    } else {
-                        setOffsetY(0);
-                    }
-                };
-
-                return (
-                    <div 
-                        className={`fixed top-4 left-1/2 -translate-x-1/2 z-[110] toast-enter w-[90%] max-w-sm ${className}`}
-                        style={{ transform: `translate(-50%, ${offsetY}px)`, transition: isSwipingRef.current ? 'none' : 'transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)' }}
-                        onTouchStart={handleTouchStart}
-                        onTouchMove={handleTouchMove}
-                        onTouchEnd={handleTouchEnd}
-                        onMouseDown={handleTouchStart}
-                        onMouseMove={handleTouchMove}
-                        onMouseUp={handleTouchEnd}
-                        onMouseLeave={handleTouchEnd}
-                        onClick={onClick}
-                    >
-                        {children}
-                    </div>
-                );
-            };
-
             const renderGlobalOverlays = () => (
                 <>
                     {/* Install PWA Guide Modal */}
@@ -2371,124 +2560,6 @@
                     )}
                 </>
             );
-
-            const SwipeableGroupItem = ({ group, onClick, onDelete, onToggleSettle, language, t, formatActivityTime }) => {
-                const [offsetX, setOffsetX] = useState(0);
-                const [isOpen, setIsOpen] = useState(false);
-                const startXRef = useRef(0);
-                const isSwipingRef = useRef(false);
-                const itemRef = useRef(null);
-
-                const ACTION_WIDTH = 140; // 70px per button
-
-                const handleTouchStart = (e) => {
-                    startXRef.current = e.touches ? e.touches[0].clientX : e.clientX;
-                    isSwipingRef.current = true;
-                };
-
-                const handleTouchMove = (e) => {
-                    if (!isSwipingRef.current) return;
-                    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-                    const deltaX = clientX - startXRef.current;
-                    
-                    if (deltaX < 0) {
-                        const newOffset = isOpen ? Math.max(-ACTION_WIDTH - 20, -ACTION_WIDTH + deltaX) : Math.max(-ACTION_WIDTH - 20, deltaX);
-                        setOffsetX(newOffset);
-                    } else if (isOpen && deltaX > 0) {
-                        setOffsetX(Math.min(0, -ACTION_WIDTH + deltaX));
-                    }
-                };
-
-                const handleTouchEnd = () => {
-                    if (!isSwipingRef.current) return;
-                    isSwipingRef.current = false;
-                    if (offsetX < -ACTION_WIDTH / 2) {
-                        setOffsetX(-ACTION_WIDTH);
-                        setIsOpen(true);
-                    } else {
-                        setOffsetX(0);
-                        setIsOpen(false);
-                    }
-                };
-
-                useEffect(() => {
-                    const handleClickOutside = (e) => {
-                        if (isOpen && itemRef.current && !itemRef.current.contains(e.target)) {
-                            setOffsetX(0);
-                            setIsOpen(false);
-                        }
-                    };
-                    document.addEventListener('mousedown', handleClickOutside);
-                    document.addEventListener('touchstart', handleClickOutside);
-                    return () => {
-                        document.removeEventListener('mousedown', handleClickOutside);
-                        document.removeEventListener('touchstart', handleClickOutside);
-                    };
-                }, [isOpen]);
-
-                return (
-                    <div className="relative overflow-hidden border-b border-gray-50 dark:border-darkBorder bg-white dark:bg-darkCard" ref={itemRef} style={{ touchAction: 'pan-y' }}>
-                        {/* Action Buttons (Background) */}
-                        <div className="absolute top-0 right-0 h-full flex items-center z-0">
-                            <button 
-                                onClick={(e) => { e.stopPropagation(); onToggleSettle(group); setOffsetX(0); setIsOpen(false); }}
-                                className={`h-full w-[70px] ${group.is_settled ? 'bg-gray-400' : 'bg-green-500'} text-white flex flex-col items-center justify-center text-sm font-bold active:opacity-80 transition-colors`}
-                            >
-                                <i className={`fa-solid ${group.is_settled ? 'fa-rotate-left' : 'fa-check-double'} mb-1 text-lg`}></i>
-                                {group.is_settled ? (language === 'zh' ? '撤销' : 'Undo') : (language === 'zh' ? '结清' : 'Settle')}
-                            </button>
-                            <button 
-                                onClick={(e) => { e.stopPropagation(); onDelete(group); setOffsetX(0); setIsOpen(false); }}
-                                className="h-full w-[70px] bg-red-500 text-white flex flex-col items-center justify-center text-sm font-bold active:bg-red-600 transition-colors"
-                            >
-                                <i className="fa-solid fa-trash-can mb-1 text-lg"></i>
-                                {language === 'zh' ? '删除' : 'Delete'}
-                            </button>
-                        </div>
-
-                        {/* Main Content (Foreground) */}
-                        <div 
-                            className={`relative z-10 flex items-center p-4 bg-white dark:bg-darkCard cursor-pointer active:bg-gray-50 dark:active:bg-darkBorder ${isSwipingRef.current ? '' : 'transition-transform duration-300'}`}
-                            style={{ transform: `translateX(${offsetX}px)` }}
-                            onClick={() => {
-                                if (isOpen) {
-                                    setOffsetX(0);
-                                    setIsOpen(false);
-                                } else {
-                                    onClick();
-                                }
-                            }}
-                            onTouchStart={handleTouchStart}
-                            onTouchMove={handleTouchMove}
-                            onTouchEnd={handleTouchEnd}
-                            onMouseDown={handleTouchStart}
-                            onMouseMove={handleTouchMove}
-                            onMouseUp={handleTouchEnd}
-                            onMouseLeave={handleTouchEnd}
-                        >
-                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-lg shadow-sm shrink-0 transition-colors ${group.is_settled ? 'bg-gray-300 dark:bg-gray-600' : 'bg-gradient-to-br from-primaryLight to-primary'}`}>
-                                {group.name.substring(0, 2)}
-                            </div>
-                            <div className="ml-4 flex-1 overflow-hidden">
-                                <div className="flex justify-between items-center mb-1">
-                                    <h3 className={`font-bold truncate transition-colors ${group.is_settled ? 'text-gray-400 dark:text-gray-500 line-through' : 'text-textMain dark:text-darkTextMain'}`}>
-                                        {group.name}
-                                    </h3>
-                                    <span className="text-xs text-textSub whitespace-nowrap">{formatActivityTime(group.last_activity)}</span>
-                                </div>
-                                <p className="text-sm text-textSub truncate">
-                                    {group.is_settled ? (language === 'zh' ? '此账已结清' : 'Settled') : t.clickToEnter}
-                                </p>
-                            </div>
-                            {group.is_settled && (
-                                <div className="ml-2 w-6 h-6 rounded-full bg-green-50 dark:bg-green-900/20 text-green-500 flex items-center justify-center shrink-0">
-                                    <i className="fa-solid fa-check text-xs"></i>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                );
-            };
 
             const renderScreen = () => {
                 if (showLogin || !currentUser) {
@@ -3085,9 +3156,14 @@
                                     {/* Welcome Guide Carousel (Persistent until dismissed) */}
                                     {!hideWelcomeGuide && (
                                         <div className="bg-white dark:bg-darkCard rounded-2xl p-0 card-shadow relative overflow-hidden">
-                                            <button onClick={() => setHideWelcomeGuide(true)} className="absolute top-4 right-4 z-20 text-gray-300 hover:text-gray-500 w-8 h-8 flex items-center justify-center bg-gray-50 dark:bg-darkBorder rounded-full active:scale-90 transition-transform">
-                                                <i className="fa-solid fa-xmark"></i>
-                                            </button>
+                                            <div className="absolute top-4 right-4 z-20 flex items-center gap-2">
+                                                <button onClick={() => setHideWelcomeGuide(true)} className="text-xs font-bold text-gray-400 hover:text-primary active:scale-95 transition-all bg-gray-50 dark:bg-darkBorder px-3 py-1.5 rounded-full">
+                                                    {language === 'zh' ? '不再提醒' : 'Don\'t show again'}
+                                                </button>
+                                                <button onClick={() => setHideWelcomeGuide(true)} className="text-gray-300 hover:text-gray-500 w-8 h-8 flex items-center justify-center bg-gray-50 dark:bg-darkBorder rounded-full active:scale-90 transition-transform">
+                                                    <i className="fa-solid fa-xmark"></i>
+                                                </button>
+                                            </div>
                                             
                                             <div 
                                                 className="flex transition-transform duration-300 ease-in-out"
@@ -3516,17 +3592,43 @@
 
                         {/* Scanner Modal */}
                         {showScannerModal && (
-                            <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex flex-col z-50 animate-fade-in">
-                                <div className="flex justify-between items-center p-6 text-white">
-                                    <h3 className="text-xl font-bold">{t.scan}</h3>
-                                    <button onClick={() => setShowScannerModal(false)} className="text-white/70 hover:text-white"><i className="fa-solid fa-xmark text-2xl"></i></button>
+                            <div className="fixed inset-0 bg-black z-[100] animate-fade-in flex flex-col">
+                                <div className="absolute top-0 left-0 w-full pt-safe pb-4 px-6 flex justify-between items-center z-10 bg-gradient-to-b from-black/80 to-transparent">
+                                    <h3 className="text-xl font-bold text-white tracking-widest">{t.scan}</h3>
+                                    <button onClick={() => setShowScannerModal(false)} className="w-10 h-10 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center text-white active:scale-90 transition-transform mt-2">
+                                        <i className="fa-solid fa-xmark text-xl"></i>
+                                    </button>
                                 </div>
-                                <div className="flex-1 flex flex-col items-center justify-center p-4">
-                                    <div className="w-full max-w-sm bg-black rounded-2xl overflow-hidden border-2 border-primary/50 shadow-[0_0_30px_rgba(67,181,228,0.3)] relative">
-                                        <div id="reader" className="w-full"></div>
+                                <div className="flex-1 relative w-full h-full">
+                                    <div id="reader" className="w-full h-full object-cover"></div>
+                                    {/* Scan Frame Overlay */}
+                                    <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center">
+                                        <div className="w-[250px] h-[250px] border-2 border-white/50 rounded-3xl relative shadow-[0_0_0_9999px_rgba(0,0,0,0.5)]">
+                                            {/* Corner brackets */}
+                                            <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-primary rounded-tl-3xl"></div>
+                                            <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-primary rounded-tr-3xl"></div>
+                                            <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-primary rounded-bl-3xl"></div>
+                                            <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-primary rounded-br-3xl"></div>
+                                            
+                                            {/* Scanning line animation */}
+                                            <div className="absolute top-0 left-0 w-full h-0.5 bg-primary shadow-[0_0_10px_#ff2442] animate-[scanLine_2s_ease-in-out_infinite]"></div>
+                                        </div>
+                                        <p className="text-white/80 text-sm mt-8 font-medium tracking-wide">
+                                            {language === 'zh' ? '将二维码放入框内，即可自动扫描' : 'Place QR code within the frame to scan'}
+                                        </p>
                                     </div>
-                                    <p className="text-white/70 text-sm mt-8 text-center">{language === 'zh' ? '将二维码放入框内，即可自动扫描' : 'Place QR code within the frame to scan'}</p>
                                 </div>
+                                <style>{`
+                                    @keyframes scanLine {
+                                        0% { top: 0; opacity: 0; }
+                                        10% { opacity: 1; }
+                                        90% { opacity: 1; }
+                                        100% { top: 250px; opacity: 0; }
+                                    }
+                                    /* Hide the ugly default HTML5-QRCode UI elements since we use the raw API now */
+                                    #reader { border: none !important; background: black; }
+                                    #reader video { object-fit: cover !important; width: 100% !important; height: 100% !important; }
+                                `}</style>
                             </div>
                         )}
 
@@ -3584,7 +3686,7 @@
                                                         {isSelf ? (
                                                             <span className="text-xs text-textSub dark:text-darkTextSub font-bold px-3">{language === 'zh' ? '我自己' : 'Me'}</span>
                                                         ) : isFriend ? (
-                                                            <span className="text-xs text-textSub dark:text-darkTextSub font-bold px-3">{language === 'zh' ? '已添加' : 'Added'}</span>
+                                                            <span className="text-xs text-primary font-bold px-3">{language === 'zh' ? '已经是好友' : 'Already friends'}</span>
                                                         ) : (
                                                             <button onClick={() => handleAddSearchedFriend(user)} className="bg-primary text-white px-4 py-2 rounded-full text-sm font-bold active:scale-95 transition-transform">
                                                                 {t.addFriend}
@@ -4071,7 +4173,7 @@
                         )}
 
                         {/* Chat Feed */}
-                        <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-20" ref={chatScrollRef}>
+                        <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-32" ref={chatScrollRef}>
                             {feed.length === 0 && (
                                 <div className="text-center text-textSub dark:text-darkTextSub mt-10 text-sm">
                                     {t.noChatYet}
@@ -4141,9 +4243,9 @@
                             })}
                         </div>
 
-                        {/* Floating Add Expense Button */}
-                        <div className="absolute bottom-20 right-4 z-10">
-                            <button onClick={openAddExpense} className="bg-primary text-white shadow-float rounded-full px-5 py-3 font-bold flex items-center gap-2 active:scale-95 transition-transform">
+                        {/* Floating Add Expense Button */}   
+                        <div className="absolute right-4 z-10" style={{ bottom: 'calc(4.5rem + env(safe-area-inset-bottom, 20px))' }}>
+                            <button onClick={openAddExpense}  className="bg-primary text-white shadow-float rounded-full px-5 py-3 font-bold flex items-center gap-2 active:scale-95 transition-transform">
                                 <i className="fa-solid fa-plus"></i> {t.recordOne}
                             </button>
                         </div>
